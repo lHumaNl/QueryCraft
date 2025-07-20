@@ -68,11 +68,11 @@ Create a `config.yaml` file with the following structure:
 # Path to user configurations
 users_config_path: "users.yaml"
 
-# Path to dynamic query templates
-dynamic_queries_path: "queries.yaml"
+# Path to query templates
+queries_path: "queries.yaml"
 
-# Path to dynamic filters
-dynamic_filters_path: "filters.yaml"
+# Path to filters
+filters_path: "filters.yaml"
 
 # Base probability for filter application (0-100)
 base_probability_filter: 66
@@ -183,17 +183,14 @@ Create a **setUp Thread Group** to initialize the QueryCraft generator:
 ```groovy
 // setUp Thread Group - JSR223 PreProcessor (Groovy)
 
-import com.human.QueryGenerator
 import com.human.config.ConfigLoader
 import com.human.QueryGenerator
 
 try {
     // Load configuration
-    def configLoader = new ConfigLoader("my_config.yaml") // or empty constructor for default config file (config.yaml)
-    def config = configLoader.load()
-
-    // Initialize generator
-    def generator = new QueryGenerator(config)
+    def baseDir = Paths.get(FileServer.getFileServer().getBaseDir())
+    def generator = new QueryGenerator(new ConfigLoader(baseDir, "my_config.yaml").load())
+    // or only baseDir in constructor if config file name is "config.yaml"
 
     // Store in JMeter properties for thread sharing
     props.put("queryGenerator", generator)
@@ -295,7 +292,7 @@ public class Actions {
             // Initialize generator
             generator = new QueryGenerator(config);
 
-            lr.output_message("QueryCraft initialized successfully");
+            lr.output_message("QueryCraft generator initialized successfully");
             return 0;
         } catch (Exception e) {
             lr.error_message("Failed to initialize QueryCraft: " + e.getMessage());
@@ -604,11 +601,51 @@ public String getFormattedTimeRange()      // Formatted time range string
 
 ### ConfigLoader
 
+#### Constructors
+
+```java
+public ConfigLoader()
+```
+Creates a ConfigLoader with default configuration file path (`config.yaml`) and no base directory.
+
+```java
+public ConfigLoader(Path baseDir)
+```
+Creates a ConfigLoader with the specified base directory. The configuration file will be resolved as `config.yaml` within the base directory.
+
+**Parameters:**
+- `baseDir` - The base directory path where the config file is located
+
+```java
+public ConfigLoader(String configPath)
+```
+Creates a ConfigLoader with the specified configuration file path and no base directory.
+
+**Parameters:**
+- `configPath` - The path to the configuration file (can be relative or absolute)
+
+```java
+public ConfigLoader(Path baseDir, String configPathWithoutBaseDir)
+```
+Creates a ConfigLoader with a base directory and a configuration file path. If the config path is relative, it will be resolved relative to the base directory. If absolute, the base directory is ignored for the config path but still used for other file paths.
+
+**Parameters:**
+- `baseDir` - The base directory path
+- `configPathWithoutBaseDir` - The configuration file path (relative to baseDir if not absolute)
+
+```java
+public ConfigLoader(String configWithAbsolutePath, Path baseDir)
+```
+Creates a ConfigLoader with an absolute configuration file path and a base directory. The base directory is used for resolving other relative file paths referenced in the configuration.
+
+**Parameters:**
+- `configWithAbsolutePath` - The absolute path to the configuration file
+- `baseDir` - The base directory path for resolving other relative file paths
+
 #### Static Methods
 
 ```java
-public static AppConfig load(String configFilePath)
-public static AppConfig load() // Loads default config file (config.yaml)
+public static AppConfig load() // Loads config file
 ```
 
 Loads application configuration from YAML file.

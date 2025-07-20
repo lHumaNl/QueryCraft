@@ -21,6 +21,7 @@ import java.util.stream.Collectors;
 public class ConfigLoader {
 
     private final String configPath;
+    private final Path baseDir;
     private final ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
     private final String DEFAULT_FILTERS_KEY = "default_filters";
     private final String BASE_PROBABILITY_FILTER_KEY = "base_probability_filter";
@@ -28,11 +29,33 @@ public class ConfigLoader {
     private String dynamicFiltersPath;
 
     public ConfigLoader() {
+        this.baseDir = null;
         this.configPath = "config.yaml";
     }
 
+    public ConfigLoader(Path baseDir) {
+        this.baseDir = baseDir;
+        this.configPath = Paths.get(this.baseDir.toString(), "config.yaml").toString();
+    }
+
     public ConfigLoader(String configPath) {
+        this.baseDir = null;
         this.configPath = configPath;
+    }
+
+    public ConfigLoader(Path baseDir, String configPathWithoutBaseDir) {
+        this.baseDir = baseDir;
+
+        if (!Paths.get(configPathWithoutBaseDir).isAbsolute()) {
+            this.configPath = Paths.get(this.baseDir.toString(), configPathWithoutBaseDir).toString();
+        } else {
+            this.configPath = configPathWithoutBaseDir;
+        }
+    }
+
+    public ConfigLoader(String configWithAbsolutePath, Path baseDir) {
+        this.baseDir = baseDir;
+        this.configPath = configWithAbsolutePath;
     }
 
     public AppConfig load() throws IOException {
@@ -40,9 +63,9 @@ public class ConfigLoader {
 
         String USERS_CONFIG_PATH_KEY = "users_config_path";
         String userConfigPath = (String) config.get(USERS_CONFIG_PATH_KEY);
-        String DYNAMIC_QUERIES_PATH_KEY = "dynamic_queries_path";
+        String DYNAMIC_QUERIES_PATH_KEY = "queries_path";
         String dynamicQueriesPath = (String) config.get(DYNAMIC_QUERIES_PATH_KEY);
-        String DYNAMIC_FILTERS_PATH_KEY = "dynamic_filters_path";
+        String DYNAMIC_FILTERS_PATH_KEY = "filters_path";
         String dynamicFiltersPath = (String) config.get(DYNAMIC_FILTERS_PATH_KEY);
 
         this.dynamicFiltersPath = dynamicFiltersPath;
@@ -69,7 +92,7 @@ public class ConfigLoader {
     }
 
     private Map<String, Object> loadConfigFile() throws IOException {
-        try (InputStream is = Files.newInputStream(Paths.get(configPath))) {
+        try (InputStream is = Files.newInputStream(resolvePath(configPath))) {
             return mapper.readValue(is, new TypeReference<Map<String, Object>>() {
             });
         }
@@ -80,7 +103,7 @@ public class ConfigLoader {
         Integer baseProbabilityFilterObj = (Integer) config.get(BASE_PROBABILITY_FILTER_KEY);
         int baseProbabilityFilter = (baseProbabilityFilterObj != null) ? baseProbabilityFilterObj : DEFAULT_PROBABILITY;
 
-        try (InputStream is = Files.newInputStream(Paths.get(userConfigPath))) {
+        try (InputStream is = Files.newInputStream(resolvePath(userConfigPath))) {
             List<BaseUserConfig> userList = mapper.readValue(is, new TypeReference<List<BaseUserConfig>>() {
             });
 
@@ -134,7 +157,7 @@ public class ConfigLoader {
     }
 
     private Map<String, RandomQueryConfig> loadQueriesAsRandomQueryConfigFromFile(String queriesFile) throws IOException {
-        Path path = Paths.get(queriesFile);
+        Path path = resolvePath(queriesFile);
         if (!Files.exists(path)) {
             throw new IOException("File not found: " + queriesFile);
         }
@@ -165,7 +188,7 @@ public class ConfigLoader {
     }
 
     private Map<String, List<String>> loadQueriesMapFromFile(String queriesFile) throws IOException {
-        Path path = Paths.get(queriesFile);
+        Path path = resolvePath(queriesFile);
         if (!Files.exists(path)) {
             throw new IOException("File not found: " + queriesFile);
         }
@@ -196,7 +219,7 @@ public class ConfigLoader {
     }
 
     private List<String> loadQueriesListFromFile(String queriesFile) throws IOException {
-        Path path = Paths.get(queriesFile);
+        Path path = resolvePath(queriesFile);
         if (!Files.exists(path)) {
             throw new IOException("File not found: " + queriesFile);
         }
@@ -215,7 +238,7 @@ public class ConfigLoader {
     }
 
     private List<String> loadFiltersFromFile(String filtersFile) throws IOException {
-        Path path = Paths.get(filtersFile);
+        Path path = resolvePath(filtersFile);
         if (!Files.exists(path)) {
             throw new IOException("File not found: " + filtersFile);
         }
@@ -234,7 +257,7 @@ public class ConfigLoader {
     }
 
     private Map<String, RandomQueryConfig> loadDynamicQueries(String dynamicQueriesPath) throws IOException {
-        Path path = Paths.get(dynamicQueriesPath);
+        Path path = resolvePath(dynamicQueriesPath);
         if (!Files.exists(path)) {
             throw new IOException("File not found: " + dynamicQueriesPath);
         }
@@ -308,7 +331,7 @@ public class ConfigLoader {
     }
 
     private Map<String, List<String>> loadDynamicFilters(String dynamicFiltersPath) throws IOException {
-        try (InputStream is = Files.newInputStream(Paths.get(dynamicFiltersPath))) {
+        try (InputStream is = Files.newInputStream(resolvePath(dynamicFiltersPath))) {
             JsonNode rootNode = mapper.readTree(is);
             Map<String, List<String>> result = new HashMap<>();
 
@@ -383,5 +406,24 @@ public class ConfigLoader {
         }
 
         return loadFiltersFromFile(dynamicFiltersPath);
+    }
+
+    /**
+     * Resolves a file path by prepending baseDir if the path is relative and baseDir is not null/empty
+     */
+    private Path resolvePath(String filePath) {
+        if (filePath == null) {
+            throw new IllegalArgumentException("File path cannot be null");
+        }
+
+        Path path = Paths.get(filePath);
+
+        // If path is absolute or baseDir is null/empty, return path as is
+        if (path.isAbsolute() || baseDir == null) {
+            return path;
+        }
+
+        // Path is relative and baseDir is set, prepend baseDir
+        return Paths.get(baseDir.toString(), filePath);
     }
 }
